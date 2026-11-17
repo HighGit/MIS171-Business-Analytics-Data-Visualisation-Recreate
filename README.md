@@ -1,72 +1,56 @@
 # Predicting the Human Development Index (HDI) with Python
 
-A multiple linear regression analysis of which country-level factors are associated with HDI,
-built with pandas and statsmodels. This is a Python rebuild of a regression analysis I first
-completed in Excel for a university unit (MIS171 Business Analytics, Deakin University),
-extended with a held-out test set and diagnostic plots.
+I first built this multiple linear regression in Excel for a university unit (MIS171 Business Analytics, Deakin University). This repo rebuilds it in Python (pandas, statsmodels, scikit-learn) to check that both tools give the same answer, then adds checks that Excel did not provide: cross-validation, variance inflation factors and influence diagnostics.
 
-## Question
-Which factors, other than the components that define HDI itself, help explain differences in
-HDI between countries, and how well can they predict it?
+Question: which country-level indicators help explain differences in the Human Development Index (HDI), and how well can they predict it?
 
 ## Data
-UNDP Human Development Report, composite indices time series (public, open data):
-https://hdr.undp.org/data-center/documentation-and-downloads
-
-Download the CSV ("Composite indices complete time series") and save it as
-`data/hdr_composite_indices.csv`.
+The dataset (128 countries, 20 numeric indicators plus region and income group, with HDI as the target) was supplied by the unit for coursework, so it is not included in this repo. To run the script, place your copy at data/mis171_dataset_a3.csv. 
 
 ## Method
-1. Select one year (default 2021) and countries with complete data.
-2. Dummy-code region (first category is the baseline).
-3. Remove predictors with near-zero correlation with HDI (|r| < 0.05).
-4. Remove one of each pair of highly correlated predictors (|r| > 0.7), keeping the one more
-   correlated with HDI.
-5. Fit OLS on a training set (75%); apply backward elimination until every predictor is
-   significant at alpha = 0.10.
-6. Check overall significance (F-test), test-set R² and RMSE, and residual plots.
-7. Predict a scenario with confidence and prediction intervals.
+1. Convert Region and IncomeGroup to dummy variables (baselines: Central and Southern Asia, High income). This gives 29 candidate predictors.
+2. Drop predictors with almost no correlation with HDI (|r| < 0.05): 5 dropped.
+3. Drop one of each pair of highly correlated predictors (|r| > 0.70), keeping the one more correlated with HDI: 9 dropped, including GDP, GNI, expected and mean years of schooling, and internet use.
+4. Fit OLS and remove the least significant predictor one at a time until all remaining predictors are significant at alpha = 0.10: 9 removed, leaving 6.
+5. Check the final model with variance inflation factors, 5-fold cross-validation and Cook's distance.
 
-Life expectancy, schooling and GNI per capita are excluded as predictors because HDI is
-calculated directly from them, which would make the model circular.
+Note: GNI and years of schooling are inputs to how HDI is calculated. They were candidates, but the multicollinearity step removed them, so none are in the final model.
 
-## Results
-_Fill in after running:_
-- Final model equation: ...
-- Adjusted R² (train): ... | R² (test): ... | RMSE (test): ...
-- Significant predictors and what they suggest: ...
-- Scenario prediction: ... (90% prediction interval: ... to ...)
+
+## Results (n=128)
+HDI = 0.987 - 0.536 x GII - 0.0013 x ParliamentFemale + 0.036 x Oceania - 0.032 x Sub-Saharan Africa - 0.128 x Low income - 0.057 x Lower-middle income
+
+Measure	                        Excel (Data Analysis ToolPak)	      Python (statsmodels)
+Final predictors	               the six above	                     identical
+R-squared / adjusted R-squared	0.927 / 0.923	                     0.927 / 0.923
+Overall F-test p-value	         2.9e-66	                           2.9e-66
+
+Extra checks in Python:
+
+5-fold cross-validated R-squared = 0.905 (RMSE 0.041), close to the in-sample 0.927.
+All variance inflation factors are below 3.1 (highest: GII, 3.06).
+Fiji and Tonga are the most influential countries (Cook's distance 0.28 and 0.23).
 
 ![Diagnostics](outputs/figures/model_diagnostics.png)
 
-## Validation: reproducing my Excel regression in Python
-`analysis_mis171.py` rebuilds a regression I first completed in Excel (MIS171, Deakin University, 128 countries)
-using the same rules: dummy variables with set baselines, correlation screening (|r| < 0.05), multicollinearity
-screening (|r| > 0.70) and backward elimination at alpha = 0.10. The unit dataset is not included in this repo
-(it was supplied for coursework); place it at `data/mis171_dataset_a3.csv` to run it.
+What the model suggests
+1. Gender inequality (GII) is the strongest predictor: a 0.1 higher GII is associated with about 0.054 lower HDI, holding the other variables constant.
+2. Low-income and lower-middle-income countries have HDI about 0.128 and 0.057 lower than high-income countries.
+3. These are associations, not causal effects.
 
-| | Excel ToolPak | Python (statsmodels) |
-|---|---|---|
-| Final predictors | GII, ParliamentFemale, Oceania, Sub-Saharan Africa, Low income, Lower-middle income | identical |
-| R² / adjusted R² | 0.927 / 0.923 | 0.927 / 0.923 |
-| Overall F-test p-value | 2.9e-66 | 2.9e-66 |
-
-Extras that Excel did not provide: variance inflation factors (all < 3.1), 5-fold cross-validated R² = 0.905
-(RMSE 0.041), and Cook's distance (Fiji and Tonga are the most influential countries, so the Oceania
-coefficient rests on very few observations).
 
 ## Limitations
-- Cross-sectional data: associations, not causal effects.
-- Small sample (~150 countries), so results depend on the train/test split.
-- Several candidate variables have missing values, which reduces the sample.
-- Residuals should be checked for non-constant variance and outliers before trusting intervals.
+1. The Oceania coefficient rests on 5 countries and is mostly driven by Fiji and Tonga (p = 0.055), so it is a fragile result.
+2. ParliamentFemale has a small negative coefficient. It overlaps with GII and region, so it should not be read as "more women in parliament lowers HDI".
+3. For the scenario prediction, the point estimate matches Excel (0.830). The Excel confidence interval (0.824 to 0.836) used a simplified formula; statsmodels accounts for how unusual the scenario is and gives 0.820 to 0.840.
+4. Cross-sectional data from a single year, with 128 countries and some countries omitted by the unit for missing data.
 
 ## Run it
 ```bash
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-python analysis.py
+python analysis_mis171.py
 ```
 
 ## Next steps
